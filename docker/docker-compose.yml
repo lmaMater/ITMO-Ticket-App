@@ -2,16 +2,31 @@ services:
   db:
     image: postgres:15
     container_name: my_postgres
+    restart: unless-stopped
     environment:
       POSTGRES_USER: myuser
-      POSTGRES_PASSWORD: mypass
-      POSTGRES_DB: mydb
+      POSTGRES_PASSWORD: mypassword
+      POSTGRES_DB: mydatabase
     ports:
       - "5432:5432"
     volumes:
-      - db_data:/var/lib/postgresql/data
-      - ./init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
-      - ./test-data.sql:/docker-entrypoint-initdb.d/02_test-data.sql:ro
+      - db-data:/var/lib/postgresql/data
+      - ./init-schema.sql:/docker-entrypoint-initdb.d/init-schema.sql:ro
+
+  data-generator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: data_generator
+    depends_on:
+      - db
+    environment:
+      PGHOST: db
+      PGPORT: "5432"
+      PGUSER: myuser
+      PGPASSWORD: mypassword
+      PGDATABASE: mydatabase
+    restart: "no"
 
 volumes:
-  db_data:
+  db-data:

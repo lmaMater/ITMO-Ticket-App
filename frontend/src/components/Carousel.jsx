@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import Autoplay from "embla-carousel-autoplay"
+import { Link } from "react-router-dom"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import {
   Carousel,
@@ -16,7 +17,7 @@ export default function FullscreenCarousel() {
   const [selectedIndex, setSelectedIndex] = React.useState(0)
 
   const plugin = React.useRef(
-    Autoplay({ delay: 7000, stopOnInteraction: true })
+    Autoplay({ delay: 5000, stopOnInteraction: true })
   )
 
   const onSelect = React.useCallback(embla => {
@@ -38,7 +39,7 @@ export default function FullscreenCarousel() {
   if (!events.length) return <p className="text-center py-10">Загружаю...</p>
 
   return (
-    <div className="relative w-full py-10">
+    <div className="relative w-full pt-0 pb-10">
       <Carousel
         plugins={[plugin.current]}
         className="w-full"
@@ -60,42 +61,42 @@ export default function FullscreenCarousel() {
 
             return (
               <CarouselItem key={event.id} className="flex justify-center">
-                <div
-                  className={`
-                    transition-all duration-500
-                    ${scale} ${opacity}
-                    w-full
-                  `}
-                >
-                  <Card className="w-full h-[33vh] bg-black text-white overflow-hidden rounded-none">
-                    <div className="px-10 h-full flex flex-col">
+                <Link to={`/events/${event.id}`} className="w-full">
+                  <div
+                    className={`
+                      transition-all duration-500
+                      ${scale} ${opacity}
+                      w-full
+                      cursor-pointer
+                      hover:shadow-2xl hover:scale-105
+                    `}
+                  >
+                    <Card className="w-full h-[33vh] bg-black text-white overflow-hidden rounded-none">
+                      <div className="px-10 h-full flex flex-col">
                         {/* Верхняя половина — заголовок и дата */}
                         <div className="flex-1 flex items-center justify-between">
-                        <CardHeader className="p-0 flex-1">
+                          <CardHeader className="p-0 flex-1">
                             <CardTitle className="text-4xl font-bold line-clamp-1">{event.title}</CardTitle>
-                        </CardHeader>
-                        {/* Дата в кружке */}
-                        <div className="ml-4 flex-shrink-0">
+                          </CardHeader>
+                          <div className="ml-4 flex-shrink-0">
                             <span className="bg-orange-500 text-black font-semibold px-4 py-2 rounded-full text-lg">
-                            {new Date(event.event_date).toLocaleDateString("ru-RU", {
-                                day: "2-digit",
-                                month: "2-digit",
-                            })}
+                              {new Date(event.start_datetime).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" })}
                             </span>
-                        </div>
+                          </div>
                         </div>
 
                         {/* Нижняя половина — описание + локация + теги */}
                         <div className="flex-1 flex flex-col justify-evenly">
-                        <CardContent className="p-0">
-                            <p className="line-clamp-2">{event.description}</p>
-                            <p className="text-sm text-gray-300">{event.location.name}</p>
-                            <p className="text-sm text-gray-300">{event.tags.map(t => t.name).join(", ")}</p>
-                        </CardContent>
+                          <CardContent className="p-0">
+                            <p className="line-clamp-1">{event.description}</p>
+                            <p className="text-sm text-gray-300 line-clamp-1">{event.venue.name}</p>
+                            <p className="text-sm text-gray-300 line-clamp-1">{event.genre.name}</p>
+                          </CardContent>
                         </div>
-                    </div>
-                  </Card>
-                </div>
+                      </div>
+                    </Card>
+                  </div>
+                </Link>
               </CarouselItem>
             )
           })}
