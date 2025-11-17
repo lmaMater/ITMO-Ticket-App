@@ -7,7 +7,6 @@ export function UserProvider({ children }) {
   const [user, setUser] = React.useState(null) // null = не авторизован
 
   React.useEffect(() => {
-    // Проверяем токен при загрузке страницы
     const token = localStorage.getItem("access_token")
     if (token) {
       fetch("http://127.0.0.1:8000/users/me", {
@@ -21,9 +20,9 @@ export function UserProvider({ children }) {
 
   const login = async (email, password) => {
     const res = await fetch("http://127.0.0.1:8000/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password })
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password })
     })
 
     if (!res.ok) throw new Error("Неверные данные")
@@ -33,12 +32,28 @@ export function UserProvider({ children }) {
 
     // подтягиваем реального юзера
     const me = await fetch("http://127.0.0.1:8000/users/me", {
-        headers: { Authorization: `Bearer ${data.access_token}` }
+      headers: { Authorization: `Bearer ${data.access_token}` }
     }).then(r => r.json())
 
     setUser(me)
     return true
-}
+  }
+
+  const register = async (email, password, full_name) => {
+    const res = await fetch("http://127.0.0.1:8000/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, full_name }),
+    })
+
+    if (!res.ok) throw new Error("Ошибка регистрации")
+
+    const data = await res.json()
+
+    localStorage.setItem("access_token", data.access_token)
+    setUser(data.user)
+    return true
+    }
 
 
 
@@ -47,8 +62,12 @@ export function UserProvider({ children }) {
     setUser(null)
   }
 
+  const updateUser = (updatedUser) => {
+    setUser(updatedUser)
+  }
+
   return (
-    <UserContext.Provider value={{ user, login, logout }}>
+    <UserContext.Provider value={{ user, login, logout, updateUser }}>
       {children}
     </UserContext.Provider>
   )

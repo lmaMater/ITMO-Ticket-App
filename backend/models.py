@@ -11,6 +11,7 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, nullable=False)
+    full_name = Column(String, nullable=True)
     password_hash = Column(String, nullable=False)
     full_name = Column(String, nullable=True)
     role = Column(String, default="user")
@@ -52,3 +53,38 @@ class PriceTier(Base):
     event_id = Column(Integer, ForeignKey("events.id"))
     price = Column(Integer)
     name = Column(String)
+
+
+class Order(Base):
+    __tablename__ = "orders"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    total_amount = Column(Numeric(10, 2), nullable=False)
+    status = Column(String, default="pending")
+    payment_method = Column(String)
+    created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
+    
+    items = relationship("OrderItem", back_populates="order")
+
+class Ticket(Base):
+    __tablename__ = "tickets"
+    id = Column(Integer, primary_key=True)
+    event_id = Column(Integer, ForeignKey("events.id"))
+    tier_id = Column(Integer, ForeignKey("price_tiers.id"))
+    user_id = Column(Integer, ForeignKey("users.id"))
+    status = Column(String, default="available")
+    price = Column(Numeric(10, 2))
+    qr_code = Column(String)
+    created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
+
+class OrderItem(Base):
+    __tablename__ = "order_items"
+    id = Column(Integer, primary_key=True)
+    order_id = Column(Integer, ForeignKey("orders.id", ondelete="CASCADE"))
+    ticket_id = Column(Integer, ForeignKey("tickets.id"))
+    price = Column(Numeric(10, 2), nullable=False)
+
+    ticket = relationship("Ticket")
+
+
+OrderItem.order = relationship("Order", back_populates="items")

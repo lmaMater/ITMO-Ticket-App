@@ -53,6 +53,18 @@ class UserRead(BaseModel):
 
     model_config = {"from_attributes": True}
 
+class UserBase(BaseModel):
+    id: int
+    name: str
+    email: EmailStr
+
+    class Config:
+        orm_mode = True
+
+class UserUpdate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[EmailStr] = None
+
 class UserOut(BaseModel):
     id: int
     email: str
@@ -65,3 +77,10 @@ class LoginForm(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+
+class OrderItemCreate(BaseModel):
+    ticket_id: int
+    price: float
+
+class OrderCreate(BaseModel):
+    items: list[OrderItemCreate]
