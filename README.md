@@ -1,5 +1,10 @@
 # ITMO Ticket App
 
+## Схема БД
+
+[dbdiagram](https://dbdiagram.io/d/6910d2466735e11170f1bf32)
+![Логотип](assets/db-scheme.svg)
+
 ## Локальный запуск
 
 ### 1. Docker (БД + генерация данных)
