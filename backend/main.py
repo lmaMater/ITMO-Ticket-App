@@ -2,14 +2,13 @@ from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import text
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from decimal import Decimal
 from datetime import datetime
 from jose import jwt, JWTError
 from passlib.hash import argon2
 from dotenv import load_dotenv
 import os, traceback
-from fastapi import status
 
 import models, crud, schemas
 from database import SessionLocal, init_db
@@ -99,7 +98,6 @@ def event_min_price(event_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="No tickets found")
     return {"min_price": min_price}
 
-# availability endpoint (used by frontend)
 @app.get("/events/{event_id}/tier/{tier_id}/available")
 def get_available_tickets(event_id: int, tier_id: int, db: Session = Depends(get_db)):
     count = db.query(models.Ticket).filter(
@@ -124,40 +122,82 @@ def has_seats(event_id: int, db: Session = Depends(get_db)):
     return {"has_seats": count > 0}
 
 # --- tickets ---
-# --- активировать билет ---
 @app.post("/tickets/{ticket_id}/activate")
 def activate_ticket(ticket_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    ticket = db.query(models.Ticket).filter(models.Ticket.id == ticket_id, models.Ticket.user_id == current_user.id).first()
-    if not ticket:
-        raise HTTPException(status_code=404, detail="Билет не найден")
-    if ticket.status != "sold":
-        raise HTTPException(status_code=400, detail=f"Нельзя активировать билет со статусом {ticket.status}")
-    ticket.status = "activated"
-    db.commit()
-    return {"status": "activated"}
+    """
+    Активировать конкретный билет (ticket_id).
+    Требования:
+      - билет должен принадлежать current_user
+      - статус должен быть 'sold' (оплачен, но не активирован)
+    Возвращает обновлённый статус и баланс.
+    """
+    try:
+        # блокируем строку, чтобы избежать гонок
+        ticket = db.query(models.Ticket).with_for_update().filter(
+            models.Ticket.id == ticket_id,
+            models.Ticket.user_id == current_user.id
+        ).first()
+        if not ticket:
+            raise HTTPException(status_code=404, detail="Ticket not found or not owned by user")
+        if ticket.status != "sold":
+            raise HTTPException(status_code=400, detail=f"Cannot activate ticket with status {ticket.status}")
 
-# --- возврат заказа или части билетов ---
+        ticket.status = "activated"
+        db.commit()
+        return {"ticket_id": ticket.id, "status": ticket.status}
+    except HTTPException:
+        try: db.rollback()
+        except: pass
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        try: db.rollback()
+        except: pass
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+# --- orders: refund & list ---
 @app.post("/orders/{order_id}/refund")
 def refund_order(order_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    """
+    Частичный возврат: возвращаем только билеты с ticket.status == 'sold'.
+    Не трогаем total_amount, меняем только статус и билетные статусы.
+    """
     order = db.query(models.Order).filter(models.Order.id == order_id, models.Order.user_id == current_user.id).first()
     if not order:
-        raise HTTPException(status_code=404, detail="Заказ не найден")
+        raise HTTPException(status_code=404, detail="Order not found")
 
-    refundable_items = [i for i in order.items if i.ticket.status == "sold"]
+    refundable_items = [i for i in order.items if i.ticket and i.ticket.status == "sold"]
     if not refundable_items:
         raise HTTPException(status_code=400, detail="Нет билетов для возврата (все активированы или отменены)")
 
-    refund_amount = sum(i.price for i in refundable_items)
-    for item in refundable_items:
-        item.ticket.status = "canceled"
+    refund_amount = sum(Decimal(str(i.price)) for i in refundable_items)
 
-    order.total_amount -= refund_amount
-    current_user.wallet_balance += refund_amount
-    db.add(models.WalletTransaction(user_id=current_user.id, amount=refund_amount, reason="refund"))
-    db.commit()
+    try:
+        # помечаем тикеты как canceled
+        for item in refundable_items:
+            item.ticket.status = "canceled"
 
-    return {"refunded": len(refundable_items), "amount": float(refund_amount)}
+        # если все билеты возвращены — считаем заказ полностью возвращённым
+        if all(i.ticket.status != "sold" for i in order.items):
+            order.status = "refunded"
 
+        # возвращаем деньги на кошелёк
+        current_user.wallet_balance = (Decimal(str(current_user.wallet_balance or 0)) + refund_amount)
+        db.add(models.WalletTransaction(user_id=current_user.id, amount=refund_amount, reason="refund"))
+
+        db.commit()
+
+        return {
+            "refunded": len(refundable_items),
+            "amount": float(refund_amount),
+            "wallet_balance": float(current_user.wallet_balance)
+        }
+    except Exception:
+        traceback.print_exc()
+        try: db.rollback()
+        except: pass
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 # --- auth ---
 @app.post("/auth/register")
@@ -231,22 +271,21 @@ def update_profile(updates: schemas.UserUpdate, db: Session = Depends(get_db), c
     db.refresh(current_user)
     return {"id": current_user.id, "full_name": current_user.full_name, "email": current_user.email}
 
-# --- orders ---
+
+# --- orders: creation (already present) ---
 @app.post("/orders")
 def create_order(order_data: schemas.OrderCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     total = Decimal("0.00")
     tickets_to_buy = []
 
     try:
-        # DEBUG input
         print("[ORDER] payload:", order_data)
         print("[ORDER] user_before:", current_user.email, current_user.wallet_balance)
 
-        # iterate items - support ticket_id OR tier_id+quantity
         for it in order_data.items:
             qty = int(it.quantity or 1)
 
-            if it.ticket_id:
+            if getattr(it, "ticket_id", None):
                 ticket = db.query(models.Ticket).with_for_update().filter(models.Ticket.id == it.ticket_id).first()
                 if not ticket:
                     raise HTTPException(status_code=404, detail=f"Ticket {it.ticket_id} not found")
@@ -255,8 +294,7 @@ def create_order(order_data: schemas.OrderCreate, db: Session = Depends(get_db),
                 tickets_to_buy.append(ticket)
                 total += Decimal(str(ticket.price or 0))
 
-            elif it.tier_id:
-                # pick qty available tickets for this tier (locked)
+            elif getattr(it, "tier_id", None):
                 available = (
                     db.query(models.Ticket)
                       .with_for_update()
@@ -273,7 +311,6 @@ def create_order(order_data: schemas.OrderCreate, db: Session = Depends(get_db),
             else:
                 raise HTTPException(status_code=400, detail="Order item must include ticket_id or tier_id")
 
-        # DEBUG before charging
         print(f"[ORDER DEBUG] total={total}; balance_before={current_user.wallet_balance}")
 
         user_balance = Decimal(str(current_user.wallet_balance or "0"))
@@ -314,35 +351,45 @@ def create_order(order_data: schemas.OrderCreate, db: Session = Depends(get_db),
         "wallet_balance": float(current_user.wallet_balance)
     }
 
+
 @app.get("/orders/me")
 def get_my_orders(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    orders = db.query(models.Order).filter(models.Order.user_id == current_user.id).all()
-    result = []
+    """
+    Возвращаем заказы пользователя с деталями билетов.
+    Сортируем по newest first.
+    """
+    orders = db.query(models.Order).options(
+        joinedload(models.Order.items).joinedload(models.OrderItem.ticket).joinedload(models.Ticket.event),
+        joinedload(models.Order.items).joinedload(models.OrderItem.ticket).joinedload(models.Ticket.tier),
+        joinedload(models.Order.items).joinedload(models.OrderItem.ticket).joinedload(models.Ticket.seat),
+    ).filter(models.Order.user_id == current_user.id).order_by(models.Order.created_at.desc()).all()
 
+    result = []
     for o in orders:
         order_items = []
         for i in o.items:
             ticket = i.ticket
+            if not ticket:
+                continue
             event = ticket.event
             tier = ticket.tier
-            seat_label = f"{getattr(ticket.seat, 'row_label', '')}, {getattr(ticket.seat, 'seat_number', '')}" if ticket.seat else None
-            
+            seat_label = f"{getattr(ticket.seat, 'row_label','')}{getattr(ticket.seat,'seat_number','')}" if ticket.seat else None
             order_items.append({
                 "id": i.id,
-                "ticket_name": getattr(ticket, "name", f"Билет {ticket.id}"),
+                "ticket_id": ticket.id,
+                "ticket_name": getattr(ticket, "qr_code", f"Билет {ticket.id}"),
                 "tier_name": tier.name if tier else None,
                 "seat_label": seat_label,
                 "event_title": event.title if event else None,
                 "event_poster": getattr(event, "poster_url", None),
                 "price": float(i.price),
-                "status": ticket.status  # available, sold, activated, canceled
+                "status": ticket.status
             })
 
         result.append({
             "id": o.id,
             "total_amount": float(o.total_amount),
-            "status": o.status,  # paid, canceled, refunded
+            "status": o.status,
             "items": order_items
         })
     return result
-
