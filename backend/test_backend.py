@@ -50,7 +50,6 @@ def user_payload():
 def admin_payload():
     return {"email": "a@test.com", "password": "pass", "full_name": "Admin"}
 
-# 1-40 "тупых" тестов
 def test_register_user_positive(user_payload):
     r = client.post("/auth/register", json=user_payload)
     assert r.status_code == 200
