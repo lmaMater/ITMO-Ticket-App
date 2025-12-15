@@ -1,7 +1,7 @@
 import React from "react"
 
 export default function ProfileModal({ open, onClose, user, logout }) {
-  if (!open) return null
+  if (!open || !user) return null
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center">
@@ -9,8 +9,11 @@ export default function ProfileModal({ open, onClose, user, logout }) {
         <h2 className="text-xl font-bold mb-4">Профиль</h2>
 
         <div className="flex flex-col space-y-2 mb-4">
-          {/* <div><strong>Имя:</strong> {user.full_name}</div> */}
+          {user.full_name && <div><strong>Имя:</strong> {user.full_name}</div>}
           <div><strong>Email:</strong> {user.email}</div>
+          {user.wallet_balance !== undefined && (
+            <div><strong>Баланс:</strong> {Number(user.wallet_balance).toFixed(2)} ₽</div>
+          )}
         </div>
 
         <button

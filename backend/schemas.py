@@ -1,44 +1,44 @@
-# schemas.py
 from typing import List, Optional
 from datetime import datetime
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, ConfigDict
 
 class Genre(BaseModel):
     id: int
     name: str
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 class Venue(BaseModel):
     id: int
     name: str
-    address: Optional[str]
+    address: Optional[str] = None
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 class PriceTier(BaseModel):
     id: int
     name: str
     price: float
+    capacity: Optional[int] = None
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 class EventBase(BaseModel):
     id: int
     title: str
-    description: Optional[str]
+    description: Optional[str] = None
     start_datetime: datetime
-    end_datetime: datetime
-    genre: Optional[Genre]
-    venue: Optional[Venue]
+    end_datetime: Optional[datetime] = None
+    genre: Optional[Genre] = None
+    venue: Optional[Venue] = None
     price_tiers: List[PriceTier] = []
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
-    full_name: str | None = None
+    full_name: Optional[str] = None
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -46,41 +46,24 @@ class UserLogin(BaseModel):
 
 class UserRead(BaseModel):
     id: int
-    email: str
-    full_name: str | None = None
+    email: EmailStr
+    full_name: Optional[str] = None
     role: str
     wallet_balance: float
 
-    model_config = {"from_attributes": True}
-
-class UserBase(BaseModel):
-    id: int
-    name: str
-    email: EmailStr
-
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 class UserUpdate(BaseModel):
-    name: Optional[str] = None
+    full_name: Optional[str] = None
     email: Optional[EmailStr] = None
 
-class UserOut(BaseModel):
-    id: int
-    email: str
-    full_name: str | None = None
-
-class LoginForm(BaseModel):
-    email: str
-    password: str
-
-class Token(BaseModel):
-    access_token: str
-    token_type: str
-
 class OrderItemCreate(BaseModel):
-    ticket_id: int
-    price: float
+    ticket_id: Optional[int] = None
+    tier_id: Optional[int] = None
+    quantity: Optional[int] = 1
+    price: Optional[float] = None
+
+    model_config = ConfigDict(from_attributes=True)
 
 class OrderCreate(BaseModel):
-    items: list[OrderItemCreate]
+    items: List[OrderItemCreate]

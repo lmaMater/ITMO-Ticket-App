@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import os
 import time
 import random
@@ -43,7 +42,7 @@ def insert_venues_and_seats(cur):
     for i in range(2):
         name = faker.company()[:120]
         address = faker.address().replace("\n", ", ")
-        seats_map = {}  # placeholder
+        seats_map = {}
         cur.execute(
             "INSERT INTO venues (name, address, seats_map_json) VALUES (%s, %s, %s) RETURNING id",
             (name, address, Json(seats_map))
@@ -51,8 +50,8 @@ def insert_venues_and_seats(cur):
         vid = cur.fetchone()[0]
         venues.append(vid)
 
-        # create seats: rows A-J, seats 1-10
-        seat_rows = [chr(ord("A") + r) for r in range(10)]
+        # создаём достаточно много сидов (чтобы влезли все капасити)
+        seat_rows = [chr(ord("A") + r) for r in range(20)]  # 20 rows -> 200 seats
         seats_to_insert = []
         for row in seat_rows:
             for sn in range(1, 11):
@@ -64,16 +63,17 @@ def insert_venues_and_seats(cur):
             "INSERT INTO seats (venue_id, row_label, seat_number, seat_type, base_price) VALUES %s",
             seats_to_insert
         )
-        print(f"Venue {vid} and its seats inserted")
+        print(f"Venue {vid} and its seats inserted ({len(seats_to_insert)})")
     return venues
 
 def insert_events_and_tiers_and_tickets(cur, venues):
-    # read genres
     cur.execute("SELECT id FROM genres")
     genre_ids = [r[0] for r in cur.fetchall()]
     assert genre_ids, "No genres found"
 
-    for i in range(6):  # create 6 events
+    tier_price_map = { "VIP": 8000.0, "Standard": 3000.0, "Budget": 1500.0 }
+
+    for i in range(6):
         venue_id = random.choice(venues)
         genre_id = random.choice(genre_ids)
         start_dt = datetime.utcnow() + timedelta(days=random.randint(1, 60), hours=random.randint(0,23))
@@ -89,7 +89,6 @@ def insert_events_and_tiers_and_tickets(cur, venues):
         )
         event_id = cur.fetchone()[0]
 
-        # price tiers
         tiers = [
             ("VIP", 8000.00, 20),
             ("Standard", 3000.00, 100),
@@ -103,23 +102,24 @@ def insert_events_and_tiers_and_tickets(cur, venues):
             )
             tier_ids.append(cur.fetchone()[0])
 
-        # tickets: take seats from this venue
+        # tickets: берем сиды из зала (их стало достаточно)
         cur.execute("SELECT id FROM seats WHERE venue_id = %s", (venue_id,))
         seat_ids = [r[0] for r in cur.fetchall()]
         random.shuffle(seat_ids)
 
         tickets_to_insert = []
         seat_index = 0
-        for tid, (_, _, capacity) in zip(tier_ids, tiers):
+        for tid, (name, _, capacity) in zip(tier_ids, tiers):
             cap = capacity if capacity is not None else 0
             for _ in range(cap):
                 if seat_index >= len(seat_ids):
                     break
                 sid = seat_ids[seat_index]
                 seat_index += 1
-                price = float(random.choice([1000.0, 1500.0, 3000.0, 8000.0]))  # or tie to tier price
+                price = tier_price_map[name]
                 qr = str(uuid.uuid4())
                 tickets_to_insert.append((event_id, sid, tid, None, "available", None, price, qr))
+
         if tickets_to_insert:
             execute_values(
                 cur,

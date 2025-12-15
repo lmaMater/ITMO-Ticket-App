@@ -11,6 +11,7 @@
 
 ```bash
 # поднять БД + генерация данных
+cd docker
 docker-compose up -d db
 ```
 
@@ -34,12 +35,13 @@ venv\Scripts\activate         # Windows
 pip install -r requirements.txt
 
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
+(uvicorn main:app --reload --log-level debug)
 ```
 
 **Проверка:**
 
 ```bash
-curl http://localhost:8000/health
+curl http://localhost:8000
 ```
 
 ### 3. Frontend (React + TS + Vite)

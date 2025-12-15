@@ -3,59 +3,76 @@ import * as React from "react"
 
 export const UserContext = React.createContext(null)
 
+async function fetchJson(url, opts = {}) {
+  const res = await fetch(url, opts)
+  if (!res.ok) {
+    const text = await res.text().catch(() => "")
+    const err = text || res.statusText || `HTTP ${res.status}`
+    throw new Error(err)
+  }
+  return res.json().catch(() => ({}))
+}
+
 export function UserProvider({ children }) {
-  const [user, setUser] = React.useState(null) // null = не авторизован
+  const [user, setUser] = React.useState(null)
+  const [loading, setLoading] = React.useState(true)
 
   React.useEffect(() => {
-    const token = localStorage.getItem("access_token")
-    if (token) {
-      fetch("http://127.0.0.1:8000/users/me", {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-        .then(res => res.ok ? res.json() : Promise.reject())
-        .then(setUser)
-        .catch(() => localStorage.removeItem("access_token"))
-    }
+    (async () => {
+      try {
+        const token = localStorage.getItem("access_token")
+        if (!token) {
+          setLoading(false)
+          return
+        }
+        const me = await fetchJson("http://127.0.0.1:8000/users/me", {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        setUser(me)
+      } catch (e) {
+        console.error("User fetch failed:", e)
+        localStorage.removeItem("access_token")
+        setUser(null)
+      } finally {
+        setLoading(false)
+      }
+    })()
   }, [])
 
   const login = async (email, password) => {
-    const res = await fetch("http://127.0.0.1:8000/auth/login", {
+    const data = await fetchJson("http://127.0.0.1:8000/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password })
     })
-
-    if (!res.ok) throw new Error("Неверные данные")
-
-    const data = await res.json()
     localStorage.setItem("access_token", data.access_token)
-
-    // подтягиваем реального юзера
-    const me = await fetch("http://127.0.0.1:8000/users/me", {
+    if (data.user) {
+      setUser(data.user)
+      return true
+    }
+    const me = await fetchJson("http://127.0.0.1:8000/users/me", {
       headers: { Authorization: `Bearer ${data.access_token}` }
-    }).then(r => r.json())
-
+    })
     setUser(me)
     return true
   }
 
   const register = async (email, password, full_name) => {
-    const res = await fetch("http://127.0.0.1:8000/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, full_name }),
+    const data = await fetchJson("http://127.0.0.1:8000/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, full_name }),
     })
-
-    if (!res.ok) throw new Error("Ошибка регистрации")
-
-    const data = await res.json()
-
     localStorage.setItem("access_token", data.access_token)
-    setUser(data.user)
-    return true
+    if (data.user) setUser(data.user)
+    else {
+      const me = await fetchJson("http://127.0.0.1:8000/users/me", {
+        headers: { Authorization: `Bearer ${data.access_token}` }
+      })
+      setUser(me)
     }
-
-
+    return true
+  }
 
   const logout = () => {
     localStorage.removeItem("access_token")
@@ -67,7 +84,7 @@ export function UserProvider({ children }) {
   }
 
   return (
-    <UserContext.Provider value={{ user, login, logout, updateUser }}>
+    <UserContext.Provider value={{ user, login, register, logout, updateUser, loading }}>
       {children}
     </UserContext.Provider>
   )
