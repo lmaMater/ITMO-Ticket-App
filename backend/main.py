@@ -100,12 +100,25 @@ def event_min_price(event_id: int, db: Session = Depends(get_db)):
 
 @app.get("/events/{event_id}/tier/{tier_id}/available")
 def get_available_tickets(event_id: int, tier_id: int, db: Session = Depends(get_db)):
-    count = db.query(models.Ticket).filter(
+    """
+    Возвращаем для конкретного тарифа:
+      - available: сколько билетов в этом тарифе со статусом 'available'
+      - has_seats: есть ли у этого тарифа билеты с seat_id != NULL (т.е. сидячие места)
+    """
+    available_count = db.query(models.Ticket).filter(
         models.Ticket.event_id == event_id,
         models.Ticket.tier_id == tier_id,
         models.Ticket.status == "available"
     ).count()
-    return {"available": count}
+    
+    has_seats = db.query(models.Ticket).filter(
+        models.Ticket.event_id == event_id,
+        models.Ticket.tier_id == tier_id,
+        models.Ticket.seat_id != None
+    ).count() > 0
+
+    return {"available": available_count, "has_seats": has_seats}
+
 
 @app.get("/events/{event_id}/has-seats")
 def has_seats(event_id: int, db: Session = Depends(get_db)):

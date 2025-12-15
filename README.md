@@ -58,10 +58,7 @@ npm run dev
 
 ```bash
 # БД
-docker-compose restart db
-
-# Генератор данных
-docker-compose run --rm data-generator
+docker-compose up --build --force-recreate
 
 # Backend
 uvicorn main:app --reload --host 0.0.0.0 --port 8000

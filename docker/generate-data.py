@@ -50,8 +50,8 @@ def insert_venues_and_seats(cur):
         vid = cur.fetchone()[0]
         venues.append(vid)
 
-        # создаём достаточно много сидов (чтобы влезли все капасити)
-        seat_rows = [chr(ord("A") + r) for r in range(20)]  # 20 rows -> 200 seats
+        # создаём сиды
+        seat_rows = [chr(ord("A") + r) for r in range(20)]
         seats_to_insert = []
         for row in seat_rows:
             for sn in range(1, 11):
@@ -71,7 +71,7 @@ def insert_events_and_tiers_and_tickets(cur, venues):
     genre_ids = [r[0] for r in cur.fetchall()]
     assert genre_ids, "No genres found"
 
-    tier_price_map = { "VIP": 8000.0, "Standard": 3000.0, "Budget": 1500.0 }
+    tier_price_map = { "VIP": 8000.0, "Standard": 3000.0, "Budget": 1500.0, "Dancefloor": 1000.0 }
 
     for i in range(6):
         venue_id = random.choice(venues)
@@ -89,10 +89,12 @@ def insert_events_and_tiers_and_tickets(cur, venues):
         )
         event_id = cur.fetchone()[0]
 
+        # создаём tiers — добавим Dancefloor (без сидов)
         tiers = [
             ("VIP", 8000.00, 20),
             ("Standard", 3000.00, 100),
-            ("Budget", 1500.00, 80)
+            ("Budget", 1500.00, 80),
+            ("Dancefloor", 1000.00, 50)  # билеты без сидов
         ]
         tier_ids = []
         for name, price, capacity in tiers:
@@ -102,7 +104,7 @@ def insert_events_and_tiers_and_tickets(cur, venues):
             )
             tier_ids.append(cur.fetchone()[0])
 
-        # tickets: берем сиды из зала (их стало достаточно)
+        # забираем сиды только один раз
         cur.execute("SELECT id FROM seats WHERE venue_id = %s", (venue_id,))
         seat_ids = [r[0] for r in cur.fetchall()]
         random.shuffle(seat_ids)
@@ -110,13 +112,15 @@ def insert_events_and_tiers_and_tickets(cur, venues):
         tickets_to_insert = []
         seat_index = 0
         for tid, (name, _, capacity) in zip(tier_ids, tiers):
-            cap = capacity if capacity is not None else 0
+            cap = capacity if capacity else 0
             for _ in range(cap):
-                if seat_index >= len(seat_ids):
-                    break
-                sid = seat_ids[seat_index]
-                seat_index += 1
-                price = tier_price_map[name]
+                sid = None
+                if name != "Dancefloor":
+                    if seat_index >= len(seat_ids):
+                        break
+                    sid = seat_ids[seat_index]
+                    seat_index += 1
+                price = tier_price_map.get(name, 1500.0)
                 qr = str(uuid.uuid4())
                 tickets_to_insert.append((event_id, sid, tid, None, "available", None, price, qr))
 
