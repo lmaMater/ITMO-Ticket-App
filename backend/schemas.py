@@ -35,27 +35,28 @@ class EventBase(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-class UserCreate(BaseModel):
-    email: EmailStr
-    password: str
-    full_name: Optional[str] = None
-
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
 
+class UserCreate(BaseModel):
+    email: EmailStr
+    password: str
+    full_name: str = ""
+
 class UserRead(BaseModel):
     id: int
     email: EmailStr
-    full_name: Optional[str] = None
+    full_name: str = ""
     role: str
     wallet_balance: float
 
     model_config = ConfigDict(from_attributes=True)
 
 class UserUpdate(BaseModel):
-    full_name: Optional[str] = None
+    full_name: str = ""
     email: Optional[EmailStr] = None
+
 
 class OrderItemCreate(BaseModel):
     ticket_id: Optional[int] = None

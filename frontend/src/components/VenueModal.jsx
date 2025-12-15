@@ -15,6 +15,7 @@ export default function VenueModal({ venue, onClose }) {
   const [errorSeats, setErrorSeats] = useState("")
   const [selectedSeat, setSelectedSeat] = useState(null)
 
+  // --- загрузка мероприятий ---
   useEffect(() => {
     if (!venue) return
     setLoadingEvents(true)
@@ -34,6 +35,7 @@ export default function VenueModal({ venue, onClose }) {
     })()
   }, [venue])
 
+  // --- загрузка мест ---
   const loadSeats = async () => {
     setLoadingSeats(true)
     setErrorSeats("")
@@ -51,22 +53,26 @@ export default function VenueModal({ venue, onClose }) {
   }
 
   // --- легенда ---
-  const seatTypes = Array.from(new Set(seats.map(s => s.seat_type).filter(Boolean)))
-  const tierNames = Array.from(
-    new Set(
-      events
-        .flatMap(ev => (ev.price_tiers || []).map(t => t.name))
-        .filter(Boolean)
-        .map(t => t.trim().toLowerCase()) // нормализация
-    )
-  ).map(t => t.charAt(0).toUpperCase() + t.slice(1)) // первый символ заглавный
+  const seatTypes = seats
+  .map(s => s.seat_type)
+  .filter(Boolean)
+  .map(s => s.trim())
+  .map(s => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase());
 
-  const legendKeys = [...seatTypes, ...tierNames]
+  const tierNames = events
+  .flatMap(ev => (ev.price_tiers || []).map(t => t.name).filter(Boolean))
+  .map(t => t.trim())
+  .map(t => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase());
 
-  const palette = ["bg-yellow-300","bg-amber-300","bg-lime-300","bg-cyan-300","bg-sky-300","bg-violet-300","bg-pink-300","bg-rose-300","bg-emerald-300"]
-  const typeColors = {}
-  legendKeys.forEach((k, i) => typeColors[k] = palette[i % palette.length])
+  const legendKeys = Array.from(new Set([...seatTypes, ...tierNames]))
+  .filter(k => k.toLowerCase() !== "dancefloor");
 
+  const palette = ["bg-yellow-300","bg-amber-300","bg-lime-300","bg-cyan-300","bg-sky-300","bg-violet-300","bg-pink-300","bg-rose-300","bg-emerald-300"];
+  const typeColors = {};
+  legendKeys.forEach((k, i) => typeColors[k] = palette[i % palette.length]);
+
+
+  // --- подготовка рядов ---
   const rows = {}
   seats.forEach(s => {
     const r = s.row_label || "?"
@@ -87,7 +93,7 @@ export default function VenueModal({ venue, onClose }) {
           <Button size="sm" onClick={onClose}>Закрыть</Button>
         </div>
 
-        {/* контент: мероприятия + схема */}
+        {/* мероприятия + схема */}
         <div className="flex flex-col gap-4 overflow-auto max-h-[70vh]">
           {/* events */}
           <div>
@@ -111,7 +117,9 @@ export default function VenueModal({ venue, onClose }) {
 
           {/* seats toggle */}
           <div className="flex items-center justify-between">
-            <div className="text-sm text-gray-700">{seats.length ? `${seats.length} мест в базе` : "Схема: неизвестно / танцпол"}</div>
+            <div className="text-sm text-gray-700">
+              {seats.length ? `${seats.length} мест в базе` : "Схема: неизвестно / танцпол"}
+            </div>
             <Button size="sm" onClick={async () => { if (!showSeats) await loadSeats(); setShowSeats(s => !s) }}>
               {showSeats ? "Спрятать места" : "Показать места"}
             </Button>
@@ -129,26 +137,33 @@ export default function VenueModal({ venue, onClose }) {
                 ) : seats.length === 0 ? (
                   <div className="text-sm text-gray-700">Танцпол — мест нет в схеме. Смотри тарифы в мероприятиях.</div>
                 ) : (
-                  <ScrollArea className="max-h-56 overflow-y-auto border rounded p-2 bg-white">
+                  <ScrollArea className="max-h-56 overflow-auto border rounded p-2 bg-white">
                     <div className="space-y-2">
-                      {sortedRowKeys.map(rowLabel => (
+                        {sortedRowKeys.map(rowLabel => (
                         <div key={rowLabel} className="flex items-center gap-2">
-                          <div className="w-8 font-bold text-sm">{rowLabel}</div>
-                          <div className="flex gap-1 overflow-x-auto min-w-0">
-                            {rows[rowLabel].map(s => (
-                              <div
-                                key={s.id}
-                                className={`px-2 py-1 text-xs rounded border min-w-[36px] text-center ${typeColors[s.seat_type] ?? "bg-gray-200"} ${selectedSeat?.id === s.id ? "border-2 border-blue-500" : ""}`}
-                                onClick={() => setSelectedSeat(s)}
-                              >
-                                {s.seat_number}
-                              </div>
-                            ))}
-                          </div>
+                            <div className="w-8 font-bold text-sm">{rowLabel}</div>
+                            <div className="flex gap-1 overflow-x-auto flex-nowrap min-w-0">
+                            {rows[rowLabel].map(s => {
+                                const seatTypeNormalized = s.seat_type
+                                ? s.seat_type.trim().charAt(0).toUpperCase() + s.seat_type.trim().slice(1).toLowerCase()
+                                : null;
+
+                                return (
+                                <div
+                                    key={s.id}
+                                    className={`px-2 py-1 text-xs rounded border min-w-[36px] text-center ${typeColors[seatTypeNormalized] ?? "bg-gray-200"} ${selectedSeat?.id === s.id ? "border-2 border-blue-500" : ""}`}
+                                    onClick={() => setSelectedSeat(s)}
+                                >
+                                    {s.seat_number}
+                                </div>
+                                )
+                            })}
+                            </div>
                         </div>
-                      ))}
+                        ))}
                     </div>
-                  </ScrollArea>
+                    </ScrollArea>
+
                 )}
               </div>
 

@@ -44,16 +44,19 @@ export default function Navbar({ user, onProfileClick }) {
           </div>
 
           {/* Баланс */}
-          <div
-            className={`text-sm font-medium text-gray-700 whitespace-nowrap cursor-pointer select-none w-[80px] text-right`}
-            onClick={toggleBalance}
-          >
-            {showBalance ? (
-              <span>{user?.wallet_balance?.toFixed(2) ?? "0.00"} ₽</span>
-            ) : (
-              <span className="blur-[2px]">8888.88 ₽</span> // замазанное
-            )}
-          </div>
+          {user && (
+            <div
+              className="text-sm font-medium text-gray-700 whitespace-nowrap cursor-pointer select-none w-[80px] text-right"
+              onClick={toggleBalance}
+            >
+              {showBalance ? (
+                <span>{user.wallet_balance?.toFixed(2) ?? "0.00"} ₽</span>
+              ) : (
+                <span className="blur-[2px]">8888.88 ₽</span>
+              )}
+            </div>
+          )}
+
         </div>
       </div>
     </nav>

@@ -36,8 +36,12 @@ export default function OrdersPage() {
     setOrders(prev => prev.map(o => o.id === updatedOrder.id ? updatedOrder : o))
   }
 
-  if (loading) return <div className="p-8 text-center">Загружаю заказы...</div>
-  if (!user) return <div className="p-8 text-center">Нужно войти, чтобы видеть заказы</div>
+  if (userLoading) return <div className="p-8 text-center">Загружаю заказы...</div>
+  if (!user) return (
+    <div className="p-8 text-center">
+      Авторизуйтесь или зарегистрируйтесь, чтобы просматривать свои заказы.
+    </div>
+  )
   if (!orders.length) return <div className="p-8 text-center">У вас пока нет заказов</div>
 
   return (

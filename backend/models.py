@@ -10,7 +10,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, nullable=False)
     password_hash = Column(String, nullable=False)
-    full_name = Column(String, nullable=True)
+    full_name = full_name = Column(String, nullable=True, default="")
     role = Column(String, default="user")
     wallet_balance = Column(Numeric(10, 2), default=0.00)
     created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)

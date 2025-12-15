@@ -9,7 +9,7 @@ export default function ProfileModal({ open, onClose, user, logout }) {
         <h2 className="text-xl font-bold mb-4">Профиль</h2>
 
         <div className="flex flex-col space-y-2 mb-4">
-          {user.full_name && <div><strong>Имя:</strong> {user.full_name}</div>}
+          <div><strong>Имя:</strong> {user.full_name || "—"}</div>
           <div><strong>Email:</strong> {user.email}</div>
           {user.wallet_balance !== undefined && (
             <div><strong>Баланс:</strong> {Number(user.wallet_balance).toFixed(2)} ₽</div>

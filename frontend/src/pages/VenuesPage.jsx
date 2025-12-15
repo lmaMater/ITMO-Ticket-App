@@ -2,7 +2,6 @@
 import React, { useEffect, useState } from "react"
 import { useSearchParams } from "react-router-dom"
 import VenueModal from "@/components/VenueModal"
-import { Button } from "@/components/ui/button"
 
 export default function VenuesPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -38,16 +37,22 @@ export default function VenuesPage() {
   }
 
   return (
-    <div className="space-y-4">
-      {venues.map(v => (
-        <div key={v.id} className="flex justify-between items-center border p-3 rounded">
-          <div>
-            <div className="font-semibold">{v.name}</div>
+    <div className="space-y-6 p-4">
+      <h1 className="text-3xl font-bold text-center">Список залов</h1>
+
+      <div className="space-y-4">
+        {venues.map(v => (
+          <div
+            key={v.id}
+            className="border p-4 rounded cursor-pointer hover:bg-gray-100 transition"
+            onClick={() => openModal(v.id)}
+          >
+            <div className="font-semibold text-lg">{v.name}</div>
             <div className="text-sm text-gray-600">{v.address}</div>
           </div>
-          <Button onClick={() => openModal(v.id)}>Открыть</Button>
-        </div>
-      ))}
+        ))}
+      </div>
+
       {venue && <VenueModal venue={venue} onClose={closeModal} />}
     </div>
   )
