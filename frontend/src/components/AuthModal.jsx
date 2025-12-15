@@ -38,7 +38,7 @@ export default function AuthModal({ open, onClose }) {
       const res = await fetch("http://127.0.0.1:8000/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: regEmail, password: regPassword, name: regName })
+        body: JSON.stringify({ email: regEmail, password: regPassword, full_name: regName })
       });
 
       const data = await res.json(); // читаем тело ответа

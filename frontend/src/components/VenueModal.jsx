@@ -1,11 +1,32 @@
 "use client"
-import React, { useEffect, useState } from "react"
+import React, { useEffect, useState, useContext } from "react"
 import { Button } from "@/components/ui/button"
 import EventCard from "./EventCard"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Link } from "react-router-dom"
+import EditVenueModal from "./EditVenueModal"
+import { UserContext } from "./UserContext"
 
-export default function VenueModal({ venue, onClose }) {
+/**
+ * VenueModal — полноценная модалка зала.
+ *
+ * Props:
+ *  - venue (object)          : initial venue object (id, name, address, ...)
+ *  - onClose (fn)            : закрыть модалку
+ *  - onVenueSaved (fn)       : (optional) вызовется с updatedVenue после редактирования
+ *  - onVenueDeleted (fn)     : (optional) вызовется с venueId после удаления
+ *
+ * Поведение:
+ *  - держим локальную копию venue в state (чтобы сразу показать изменения без перезагрузки)
+ *  - загрузка мероприятий и мест (seats) по venue.id
+ *  - админ видит кнопки редактирования/удаления; после сохранения — локально обновляем venue
+ */
+
+export default function VenueModal({ venue: initialVenue, onClose, onVenueSaved, onVenueDeleted }) {
+  const { user } = useContext(UserContext)
+  const isAdmin = user?.role === "admin"
+
+  const [venue, setVenue] = useState(initialVenue)
   const [events, setEvents] = useState([])
   const [seats, setSeats] = useState([])
   const [loadingEvents, setLoadingEvents] = useState(true)
@@ -15,9 +36,17 @@ export default function VenueModal({ venue, onClose }) {
   const [errorSeats, setErrorSeats] = useState("")
   const [selectedSeat, setSelectedSeat] = useState(null)
 
-  // --- загрузка мероприятий ---
+  const [openEdit, setOpenEdit] = useState(false)
+  const [savingDelete, setSavingDelete] = useState(false)
+
+  // keep local venue in sync with prop
   useEffect(() => {
-    if (!venue) return
+    setVenue(initialVenue)
+  }, [initialVenue])
+
+  // load events for venue
+  useEffect(() => {
+    if (!venue?.id) return
     setLoadingEvents(true)
     setErrorEvents("")
     ;(async () => {
@@ -33,10 +62,11 @@ export default function VenueModal({ venue, onClose }) {
         setLoadingEvents(false)
       }
     })()
-  }, [venue])
+  }, [venue?.id])
 
-  // --- загрузка мест ---
+  // load seats (on demand)
   const loadSeats = async () => {
+    if (!venue?.id) return
     setLoadingSeats(true)
     setErrorSeats("")
     try {
@@ -52,27 +82,34 @@ export default function VenueModal({ venue, onClose }) {
     }
   }
 
-  // --- легенда ---
-  const seatTypes = seats
-  .map(s => s.seat_type)
-  .filter(Boolean)
-  .map(s => s.trim())
-  .map(s => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase());
+  // legend keys (normalize casing)
+  const normalize = (s) => {
+    if (!s) return null
+    const t = String(s).trim()
+    if (!t) return null
+    return t.charAt(0).toUpperCase() + t.slice(1).toLowerCase()
+  }
 
-  const tierNames = events
-  .flatMap(ev => (ev.price_tiers || []).map(t => t.name).filter(Boolean))
-  .map(t => t.trim())
-  .map(t => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase());
+  const seatTypes = Array.from(new Set(
+    seats
+      .map(s => normalize(s.seat_type))
+      .filter(Boolean)
+  ))
 
+  const tierNames = Array.from(new Set(
+    events
+      .flatMap(ev => (ev.price_tiers || []).map(t => normalize(t.name)).filter(Boolean))
+  ))
+
+  // filter out dancefloor from legend (we don't color it)
   const legendKeys = Array.from(new Set([...seatTypes, ...tierNames]))
-  .filter(k => k.toLowerCase() !== "dancefloor");
+    .filter(k => k && k.toLowerCase() !== "dancefloor")
 
-  const palette = ["bg-yellow-300","bg-amber-300","bg-lime-300","bg-cyan-300","bg-sky-300","bg-violet-300","bg-pink-300","bg-rose-300","bg-emerald-300"];
-  const typeColors = {};
-  legendKeys.forEach((k, i) => typeColors[k] = palette[i % palette.length]);
+  const palette = ["bg-yellow-300","bg-amber-300","bg-lime-300","bg-cyan-300","bg-sky-300","bg-violet-300","bg-pink-300","bg-rose-300","bg-emerald-300"]
+  const typeColors = {}
+  legendKeys.forEach((k, i) => typeColors[k] = palette[i % palette.length])
 
-
-  // --- подготовка рядов ---
+  // prepare rows
   const rows = {}
   seats.forEach(s => {
     const r = s.row_label || "?"
@@ -81,19 +118,59 @@ export default function VenueModal({ venue, onClose }) {
   })
   const sortedRowKeys = Object.keys(rows).sort()
 
+  // Admin: handle delete venue
+  const handleDeleteVenue = async () => {
+    if (!venue?.id) return
+    if (!confirm("Удалить зал? Это действие необратимо.")) return
+    setSavingDelete(true)
+    try {
+      const token = localStorage.getItem("access_token")
+      const res = await fetch(`http://127.0.0.1:8000/admin/venues/${venue.id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      if (!res.ok) {
+        const err = await safeParse(res).catch(() => ({ detail: "Ошибка" }))
+        throw new Error(err.detail || "Ошибка при удалении")
+      }
+      onVenueDeleted?.(venue.id)
+      onClose()
+    } catch (e) {
+      console.error("delete venue err", e)
+      alert("Ошибка при удалении: " + (e.message || ""))
+    } finally {
+      setSavingDelete(false)
+    }
+  }
+
+  // when edit modal saves, update local venue and propagate
+  const handleVenueSaved = (updated) => {
+    if (!updated) return
+    setVenue(updated)
+    onVenueSaved?.(updated)
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 overflow-auto">
       <div className="bg-white rounded-lg w-full max-w-6xl p-5 flex flex-col gap-4 max-h-[90vh]">
         {/* header */}
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-xl font-semibold">{venue.name}</h2>
-            <div className="text-sm text-gray-600">{venue.address}</div>
+            <h2 className="text-xl font-semibold">{venue?.name ?? "Зал"}</h2>
+            <div className="text-sm text-gray-600">{venue?.address}</div>
           </div>
-          <Button size="sm" onClick={onClose}>Закрыть</Button>
+
+          <div className="flex items-center gap-2">
+            {isAdmin && (
+              <>
+                <Button size="sm" variant="outline" onClick={() => setOpenEdit(true)}>Редактировать зал</Button>
+              </>
+            )}
+            <Button size="sm" onClick={onClose}>Закрыть</Button>
+          </div>
         </div>
 
-        {/* мероприятия + схема */}
+        {/* контент: мероприятия + схема */}
         <div className="flex flex-col gap-4 overflow-auto max-h-[70vh]">
           {/* events */}
           <div>
@@ -117,9 +194,7 @@ export default function VenueModal({ venue, onClose }) {
 
           {/* seats toggle */}
           <div className="flex items-center justify-between">
-            <div className="text-sm text-gray-700">
-              {seats.length ? `${seats.length} мест в базе` : "Схема: неизвестно / танцпол"}
-            </div>
+            <div className="text-sm text-gray-700">{seats.length ? `${seats.length} мест в базе` : "Схема: неизвестно / танцпол"}</div>
             <Button size="sm" onClick={async () => { if (!showSeats) await loadSeats(); setShowSeats(s => !s) }}>
               {showSeats ? "Спрятать места" : "Показать места"}
             </Button>
@@ -137,33 +212,33 @@ export default function VenueModal({ venue, onClose }) {
                 ) : seats.length === 0 ? (
                   <div className="text-sm text-gray-700">Танцпол — мест нет в схеме. Смотри тарифы в мероприятиях.</div>
                 ) : (
-                  <ScrollArea className="max-h-56 overflow-auto border rounded p-2 bg-white">
+                  // ScrollArea позволяет и вертикальный, и горизонтальный скролл
+                  <ScrollArea className="max-h-64 overflow-auto border rounded p-2 bg-white">
                     <div className="space-y-2">
-                        {sortedRowKeys.map(rowLabel => (
+                      {sortedRowKeys.map(rowLabel => (
                         <div key={rowLabel} className="flex items-center gap-2">
-                            <div className="w-8 font-bold text-sm">{rowLabel}</div>
-                            <div className="flex gap-1 overflow-x-auto flex-nowrap min-w-0">
+                          <div className="w-8 font-bold text-sm">{rowLabel}</div>
+                          <div className="flex gap-1 overflow-x-auto flex-nowrap min-w-0">
                             {rows[rowLabel].map(s => {
-                                const seatTypeNormalized = s.seat_type
-                                ? s.seat_type.trim().charAt(0).toUpperCase() + s.seat_type.trim().slice(1).toLowerCase()
-                                : null;
-
-                                return (
+                              const seatTypeNormalized = normalize(s.seat_type)
+                              const colorClass = typeColors[seatTypeNormalized] ?? "bg-gray-200"
+                              return (
                                 <div
-                                    key={s.id}
-                                    className={`px-2 py-1 text-xs rounded border min-w-[36px] text-center ${typeColors[seatTypeNormalized] ?? "bg-gray-200"} ${selectedSeat?.id === s.id ? "border-2 border-blue-500" : ""}`}
-                                    onClick={() => setSelectedSeat(s)}
+                                  key={s.id}
+                                  role="button"
+                                  tabIndex={0}
+                                  className={`px-2 py-1 text-xs rounded border min-w-[36px] text-center ${colorClass} ${selectedSeat?.id === s.id ? "border-2 border-blue-500" : ""}`}
+                                  onClick={() => setSelectedSeat(s)}
                                 >
-                                    {s.seat_number}
+                                  {s.seat_number}
                                 </div>
-                                )
+                              )
                             })}
-                            </div>
+                          </div>
                         </div>
-                        ))}
+                      ))}
                     </div>
-                    </ScrollArea>
-
+                  </ScrollArea>
                 )}
               </div>
 
@@ -183,6 +258,22 @@ export default function VenueModal({ venue, onClose }) {
           )}
         </div>
       </div>
+
+      {/* EditVenueModal — показываем только админу */}
+      {isAdmin && openEdit && (
+        <EditVenueModal
+          open={openEdit}
+          onClose={() => setOpenEdit(false)}
+          venue={venue}
+          onSave={(updated) => {
+            // updated — объект возвращённый беком после PATCH
+            if (updated) {
+              handleVenueSaved(updated)
+            }
+            setOpenEdit(false)
+          }}
+        />
+      )}
     </div>
   )
 }

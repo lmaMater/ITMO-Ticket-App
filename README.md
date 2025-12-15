@@ -25,6 +25,14 @@ docker-compose up -d db
 docker exec -it my_postgres psql -U myuser -d mydatabase
 ```
 
+#### Админ
+
+Также генерируется админ со следующими данными:
+
+- email: admin@admin.com
+- password: admin123
+- role: admin
+
 ### 2. Backend (FastAPI)
 
 ```bash

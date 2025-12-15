@@ -54,6 +54,11 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         raise HTTPException(status_code=404, detail="User not found")
     return user
 
+def require_admin(current_user: models.User = Depends(get_current_user)):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return current_user
+
 # --- events ---
 @app.get("/events", response_model=list[schemas.EventBase])
 def list_events(limit: int = 20, venue_id: int = None, db: Session = Depends(get_db)):
@@ -272,7 +277,8 @@ def get_me(current_user: models.User = Depends(get_current_user)):
             "id": current_user.id,
             "email": current_user.email,
             "full_name": current_user.full_name,
-            "wallet_balance": float(current_user.wallet_balance or 0)
+            "wallet_balance": float(current_user.wallet_balance or 0),
+            "role": current_user.role
         }
     except Exception:
         traceback.print_exc()
@@ -288,7 +294,12 @@ def update_profile(updates: schemas.UserUpdate, db: Session = Depends(get_db), c
         current_user.full_name = updates.full_name
     db.commit()
     db.refresh(current_user)
-    return {"id": current_user.id, "full_name": current_user.full_name, "email": current_user.email}
+    return {
+        "id": current_user.id,
+        "full_name": current_user.full_name,
+        "email": current_user.email,
+        "role": current_user.role
+    }
 
 
 # --- orders: creation (already present) ---
@@ -413,11 +424,6 @@ def get_my_orders(db: Session = Depends(get_db), current_user: models.User = Dep
         })
     return result
 
-from fastapi import FastAPI, Depends, HTTPException
-from sqlalchemy.orm import Session
-import models
-from database import get_db
-
 # --- venues ---
 @app.get("/venues")
 def list_venues(db: Session = Depends(get_db)):
@@ -460,3 +466,88 @@ def get_venue(venue_id: int, db: Session = Depends(get_db)):
         "address": v.address,
         "seats_map_json": v.seats_map_json
     }
+
+# --- ADMIN EVENTS ---
+
+# --- GET ALL VENUES ---
+@app.get("/admin/venues")
+def admin_list_venues(db: Session = Depends(get_db), _: models.User = Depends(require_admin)):
+    return db.query(models.Venue).all()
+
+# --- GET ALL GENRES ---
+@app.get("/genres")
+def list_genres(db: Session = Depends(get_db)):
+    return db.query(models.Genre).all()
+
+@app.post("/admin/events")
+def admin_create_event(
+    data: schemas.EventCreate,
+    db: Session = Depends(get_db),
+    _: models.User = Depends(require_admin)
+):
+    return crud.admin_create_event(db, data)
+
+@app.patch("/admin/events/{event_id}")
+def admin_update_event(
+    event_id: int,
+    data: schemas.EventUpdate,
+    db: Session = Depends(get_db),
+    _: models.User = Depends(require_admin)
+):
+    ev = crud.admin_update_event(db, event_id, data)
+    if not ev:
+        raise HTTPException(status_code=404, detail="Event not found")
+    ev = db.query(models.Event)\
+           .options(
+               joinedload(models.Event.venue),
+               joinedload(models.Event.genre),
+               joinedload(models.Event.price_tiers)
+           )\
+           .filter(models.Event.id == event_id)\
+           .first()
+    return ev
+
+
+@app.delete("/admin/events/{event_id}")
+def admin_delete_event(
+    event_id: int,
+    db: Session = Depends(get_db),
+    _: models.User = Depends(require_admin)
+):
+    ok = crud.admin_delete_event(db, event_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Event not found")
+    return {"status": "deleted"}
+
+# --- ADMIN VENUES ---
+
+@app.post("/admin/venues")
+def admin_create_venue(
+    data: schemas.VenueCreate,
+    db: Session = Depends(get_db),
+    _: models.User = Depends(require_admin)
+):
+    return crud.admin_create_venue(db, data)
+
+@app.patch("/admin/venues/{venue_id}")
+def admin_update_venue(
+    venue_id: int,
+    data: schemas.VenueUpdate,
+    db: Session = Depends(get_db),
+    _: models.User = Depends(require_admin)
+):
+    v = crud.admin_update_venue(db, venue_id, data)
+    if not v:
+        raise HTTPException(status_code=404, detail="Venue not found")
+    return v
+
+@app.delete("/admin/venues/{venue_id}")
+def admin_delete_venue(
+    venue_id: int,
+    db: Session = Depends(get_db),
+    _: models.User = Depends(require_admin)
+):
+    ok = crud.admin_delete_venue(db, venue_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Venue not found")
+    return {"status": "deleted"}

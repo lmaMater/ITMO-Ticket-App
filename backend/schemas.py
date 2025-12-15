@@ -68,3 +68,41 @@ class OrderItemCreate(BaseModel):
 
 class OrderCreate(BaseModel):
     items: List[OrderItemCreate]
+
+class PriceTierCreate(BaseModel):
+    name: str
+    price: float
+    capacity: int
+    id: Optional[int] = None 
+
+class EventCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    genre_id: Optional[int] = None
+    venue_id: Optional[int] = None
+    start_datetime: datetime
+    end_datetime: Optional[datetime] = None
+    poster_url: Optional[str] = None
+    price_tiers: Optional[List[PriceTierCreate]] = []
+
+class EventUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    genre_id: Optional[int] = None
+    venue_id: Optional[int] = None
+    start_datetime: Optional[datetime] = None
+    end_datetime: Optional[datetime] = None
+    poster_url: Optional[str] = None
+    price_tiers: Optional[List[PriceTierCreate]] = []
+
+
+
+class VenueCreate(BaseModel):
+    name: str
+    address: Optional[str] = None
+    seats_map_json: Optional[dict] = None
+
+class VenueUpdate(BaseModel):
+    name: Optional[str]
+    address: Optional[str]
+    seats_map_json: Optional[dict]

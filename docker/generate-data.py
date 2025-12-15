@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from faker import Faker
 import psycopg2
 from psycopg2.extras import execute_values, Json
+from passlib.hash import argon2
 
 faker = Faker("ru_RU")
 
@@ -50,7 +51,6 @@ def insert_venues_and_seats(cur):
         vid = cur.fetchone()[0]
         venues.append(vid)
 
-        # создаём сиды
         seat_rows = [chr(ord("A") + r) for r in range(20)]
         seats_to_insert = []
         for row in seat_rows:
@@ -89,12 +89,11 @@ def insert_events_and_tiers_and_tickets(cur, venues):
         )
         event_id = cur.fetchone()[0]
 
-        # создаём tiers — добавим Dancefloor (без сидов)
         tiers = [
             ("VIP", 8000.00, 20),
             ("Standard", 3000.00, 100),
             ("Budget", 1500.00, 80),
-            ("Dancefloor", 1000.00, 50)  # билеты без сидов
+            ("Dancefloor", 1000.00, 50)
         ]
         tier_ids = []
         for name, price, capacity in tiers:
@@ -104,7 +103,6 @@ def insert_events_and_tiers_and_tickets(cur, venues):
             )
             tier_ids.append(cur.fetchone()[0])
 
-        # забираем сиды только один раз
         cur.execute("SELECT id FROM seats WHERE venue_id = %s", (venue_id,))
         seat_ids = [r[0] for r in cur.fetchall()]
         random.shuffle(seat_ids)
@@ -133,6 +131,25 @@ def insert_events_and_tiers_and_tickets(cur, venues):
             )
         print(f"Event {event_id}: tiers and {len(tickets_to_insert)} tickets created")
 
+def insert_admin(cur):
+    admin_email = "admin@admin.com"
+    admin_password = "admin123"
+    admin_name = "Admin"
+
+    password_hash = argon2.hash(admin_password)
+
+    cur.execute(
+        """
+        INSERT INTO users (email, password_hash, full_name, role, wallet_balance)
+        VALUES (%s, %s, %s, 'admin', 0)
+        ON CONFLICT (email) DO NOTHING
+        """,
+        (admin_email, password_hash, admin_name)
+    )
+
+    print("Admin user ensured: admin@admin.com / admin123")
+
+
 def main():
     if not wait_for_db():
         print("DB not available, exiting")
@@ -144,6 +161,7 @@ def main():
 
     try:
         insert_genres(cur)
+        insert_admin(cur)
         venues = insert_venues_and_seats(cur)
         insert_events_and_tiers_and_tickets(cur, venues)
         conn.commit()
