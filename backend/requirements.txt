@@ -10,3 +10,6 @@ passlib[argon2]
 argon2-cffi
 python-jose[cryptography]
 python-multipart
+pytest 
+pytest-asyncio
+httpx
