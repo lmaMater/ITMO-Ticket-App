@@ -22,9 +22,10 @@ export default function Navbar({ user, onProfileClick }) {
       
       {/* Правая часть */}
       <div className="w-3/4 flex items-center justify-end space-x-4">
-        <div className="cursor-pointer">
+        <div className="cursor-pointer" onClick={() => navigate("/venues")}>
           <img src={IconLocation} alt="location" className="max-h-full max-w-full" />
         </div>
+
 
         <div className="cursor-pointer" onClick={() => navigate("/orders")}>
           <img src={IconTickets} alt="tickets" className="max-h-full max-w-full" />

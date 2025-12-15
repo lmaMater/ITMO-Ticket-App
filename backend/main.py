@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi import Query
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import text
 from sqlalchemy.orm import Session, joinedload
@@ -11,7 +12,8 @@ from dotenv import load_dotenv
 import os, traceback
 
 import models, crud, schemas
-from database import SessionLocal, init_db
+from database import SessionLocal, init_db, get_db
+
 
 # --- config ---
 SECRET_KEY = os.getenv("SECRET_KEY", "supersecret")
@@ -54,8 +56,12 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
 
 # --- events ---
 @app.get("/events", response_model=list[schemas.EventBase])
-def list_events(limit: int = 20, db: Session = Depends(get_db)):
-    return crud.get_events(db, limit)
+def list_events(limit: int = 20, venue_id: int = None, db: Session = Depends(get_db)):
+    query = db.query(models.Event)
+    if venue_id is not None:
+        query = query.filter(models.Event.venue_id == venue_id)
+    return query.limit(limit).all()
+
 
 @app.get("/events/{event_id}/tickets")
 def available_tickets(event_id: int, tier_id: int, db: Session = Depends(get_db)):
@@ -110,7 +116,7 @@ def get_available_tickets(event_id: int, tier_id: int, db: Session = Depends(get
         models.Ticket.tier_id == tier_id,
         models.Ticket.status == "available"
     ).count()
-    
+
     has_seats = db.query(models.Ticket).filter(
         models.Ticket.event_id == event_id,
         models.Ticket.tier_id == tier_id,
@@ -406,3 +412,51 @@ def get_my_orders(db: Session = Depends(get_db), current_user: models.User = Dep
             "items": order_items
         })
     return result
+
+from fastapi import FastAPI, Depends, HTTPException
+from sqlalchemy.orm import Session
+import models
+from database import get_db
+
+# --- venues ---
+@app.get("/venues")
+def list_venues(db: Session = Depends(get_db)):
+    """
+    Возвращаем все залы с их базовой инфой.
+    """
+    venues = db.query(models.Venue).all()
+    return [
+        {
+            "id": v.id,
+            "name": v.name,
+            "address": v.address,
+            "seats_map_json": v.seats_map_json
+        }
+        for v in venues
+    ]
+
+@app.get("/venues/{venue_id}/seats")
+def venue_seats(venue_id: int, db: Session = Depends(get_db)):
+    seats = db.query(models.Seat).filter(models.Seat.venue_id == venue_id).order_by(models.Seat.row_label, models.Seat.seat_number).all()
+    return [
+        {
+            "id": s.id,
+            "row_label": s.row_label,
+            "seat_number": s.seat_number,
+            "seat_type": s.seat_type,
+            "base_price": float(s.base_price)
+        }
+        for s in seats
+    ]
+
+@app.get("/venues/{venue_id}")
+def get_venue(venue_id: int, db: Session = Depends(get_db)):
+    v = db.query(models.Venue).filter(models.Venue.id == venue_id).first()
+    if not v:
+        raise HTTPException(status_code=404, detail="Venue not found")
+    return {
+        "id": v.id,
+        "name": v.name,
+        "address": v.address,
+        "seats_map_json": v.seats_map_json
+    }

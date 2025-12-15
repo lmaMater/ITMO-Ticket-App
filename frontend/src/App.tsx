@@ -4,6 +4,7 @@ import Event from "@/pages/Event"
 import Navbar from "@/components/Navbar"
 import { UserProvider, UserContext } from "@/components/UserContext"
 import OrderPage from "@/pages/OrderPage"
+import VenuesPage from "@/pages/VenuesPage"
 import LoginModal from "@/components/AuthModal"
 import ProfileModal from "@/components/ProfileModal"
 import { useState, useContext } from "react"
@@ -26,7 +27,8 @@ function AppWrapper() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/events/:eventId" element={<Event />} />
-        <Route path="/orders" element={<OrderPage />} /> {/* вот сюда */}
+        <Route path="/orders" element={<OrderPage />} />
+        <Route path="/venues" element={<VenuesPage />} />
       </Routes>
 
 
